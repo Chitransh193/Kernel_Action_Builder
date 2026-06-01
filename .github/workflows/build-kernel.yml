@@ -78,18 +78,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      # ── 2. Cache apt packages ─────────────────────────────────────────────────
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        id: cache-apt
-        with:
-          path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: apt-kernel-${{ runner.os }}-v1
-          restore-keys: |
-            apt-kernel-${{ runner.os }}-
-
+      # ── 2. Set up Build Environment ───────────────────────────────────────────
       - name: Set up Build Environment
         run: |
           sudo apt-get update -qq
@@ -104,10 +93,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          # Static key so the cache is always restored across runs.
-          # New objects are simply appended; old ones are evicted by ccache itself
-          # once the max-size limit is reached.
-          key: ccache-kernel-v1
+          # Primary key includes run_id so it's unique every run — this forces
+          # Actions to save a fresh snapshot after each run, capturing newly
+          # compiled objects. restore-keys then picks up the most recent prior
+          # snapshot, so the cache always grows incrementally.
+          key: ccache-kernel-${{ github.run_id }}
           restore-keys: |
             ccache-kernel-
 
@@ -140,6 +130,7 @@ jobs:
           echo "KERNEL_VERSION=$(make kernelversion 2>/dev/null || echo 'unknown')"         >> $GITHUB_ENV
           echo "KERNEL_BRANCH=${{ github.event.inputs.kernel_branch }}"                     >> $GITHUB_ENV
           echo "KERNEL_COMMIT=$(git rev-parse --short HEAD)"                                >> $GITHUB_ENV
+          echo "KERNEL_COMMIT_MSG=$(git log -1 --pretty=format:'%s')"                      >> $GITHUB_ENV
           echo "DEFCONFIG=${{ github.event.inputs.defconfig }}"                             >> $GITHUB_ENV
 
       # ── 5. Clang toolchain ─────────────────────────────────────────────────────
@@ -221,23 +212,19 @@ jobs:
           echo "KSU_REPO=https://github.com/SukiSU-Ultra/SukiSU-Ultra"     >> $GITHUB_ENV
 
       # --- ReSukiSU ---
-      # Fixed: now correctly uses susfs branch when SUSFS is enabled,
-      # matching the same pattern as RKSU and SukiSU variants.
       - name: Setup KernelSU — ReSukiSU
         if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'ReSukiSU'
         working-directory: kernel
         run: |
-          if [ "${{ github.event.inputs.enable_susfs }}" == "true" ]; then
-            curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s susfs-main
-            echo "SUSFS_ENABLED=true"               >> $GITHUB_ENV
-            echo "KSU_BRANCH=susfs-main"            >> $GITHUB_ENV
-          else
-            curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
-            echo "SUSFS_ENABLED=false"              >> $GITHUB_ENV
-            echo "KSU_BRANCH=main"                  >> $GITHUB_ENV
-          fi
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
+          echo "KSU_BRANCH=main"                                         >> $GITHUB_ENV
           echo "KSU_VARIANT=ReSukiSU"                                    >> $GITHUB_ENV
           echo "KSU_REPO=https://github.com/ReSukiSU/ReSukiSU"          >> $GITHUB_ENV
+          if [ "${{ github.event.inputs.enable_susfs }}" == "true" ]; then
+            echo "SUSFS_ENABLED=true"  >> $GITHUB_ENV
+          else
+            echo "SUSFS_ENABLED=false" >> $GITHUB_ENV
+          fi
 
       # ── 8. Stock fallback ─────────────────────────────────────────────────────
       - name: Set Build Variant — Stock
@@ -246,15 +233,7 @@ jobs:
           echo "KSU_VARIANT=Stock"      >> $GITHUB_ENV
           echo "SUSFS_ENABLED=false"    >> $GITHUB_ENV
 
-      # ── 10. Fetch KSU commit info ──────────────────────────────────────────────
-      - name: Get KSU Commit Info
-        if: github.event.inputs.enable_ksu == 'true'
-        run: |
-          KSU_COMMIT=$(git ls-remote "${KSU_REPO}.git" "${KSU_BRANCH}" | cut -f1 | cut -c1-7)
-          echo "KSU_COMMIT=${KSU_COMMIT:-unknown}"               >> $GITHUB_ENV
-          echo "KSU_COMMIT_URL=${KSU_REPO}/commit/${KSU_COMMIT}" >> $GITHUB_ENV
-
-      # ── 11. Prepare log paths ──────────────────────────────────────────────────
+      # ── 10. Prepare log paths ─────────────────────────────────────────────────
       - name: Prepare Log Paths
         run: |
           mkdir -p "$GITHUB_WORKSPACE/logs"
@@ -345,15 +324,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}"     >> $GITHUB_ENV
           echo "ANYKERNEL_DIR=$(pwd)"     >> $GITHUB_ENV
 
-      # ── 16. Upload artifact (GH backup) ───────────────────────────────────────
-      - name: Upload Kernel Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ANYKERNEL_DIR }}/${{ env.ZIP_NAME }}.zip
-          retention-days: 30
-
-      # ── 17. Send ZIP + message to Telegram ────────────────────────────────────
+      # ── 16. Send ZIP + message to Telegram ────────────────────────────────────
       - name: Send Kernel ZIP to Telegram
         if: success()
         run: |
@@ -366,42 +337,36 @@ jobs:
           ZIP_ESC=$(esc "${ZIP_NAME}.zip")
           BRANCH_ESC=$(esc "${KERNEL_BRANCH}")
           COMMIT_ESC=$(esc "${KERNEL_COMMIT}")
+          COMMIT_MSG_ESC=$(esc "${KERNEL_COMMIT_MSG}")
           TIME_ESC=$(esc "${duration_min}m ${duration_sec}s")
 
           CAPTION_FILE=$(mktemp)
 
-          printf "✅ *Build Successful*\n\n" >> "$CAPTION_FILE"
-          printf "\`%s\`\n\n" "${ZIP_ESC}"  >> "$CAPTION_FILE"
-
-          printf "📱  \`RM6785 \(MT6785\)\`\n"            >> "$CAPTION_FILE"
-          printf "🌿  \`%s\`\n" "${BRANCH_ESC}"           >> "$CAPTION_FILE"
-          printf "🔖  \`%s\`\n" "${COMMIT_ESC}"           >> "$CAPTION_FILE"
-          printf "⏱  \`%s\`\n\n" "${TIME_ESC}"            >> "$CAPTION_FILE"
+          printf "*Build Successful*\n"                                       >> "$CAPTION_FILE"
+          printf "\`%s\`\n\n"           "${ZIP_ESC}"                         >> "$CAPTION_FILE"
+          printf "*Branch*  \`%s\`\n"   "${BRANCH_ESC}"                      >> "$CAPTION_FILE"
+          printf "*Commit*  \`%s\` — %s\n" "${COMMIT_ESC}" "${COMMIT_MSG_ESC}" >> "$CAPTION_FILE"
+          printf "*Time*    \`%s\`\n"   "${TIME_ESC}"                        >> "$CAPTION_FILE"
 
           if [ "${{ github.event.inputs.enable_ksu }}" == "true" ]; then
             KSU_VARIANT_ESC=$(esc "${KSU_VARIANT}")
-            KSU_COMMIT_ESC=$(esc "${KSU_COMMIT:-unknown}")
-
-            printf "🛡 *KernelSU*  \`%s\`\n" "${KSU_VARIANT_ESC}"  >> "$CAPTION_FILE"
-            printf "🔖  \`%s\`\n" "${KSU_COMMIT_ESC}"               >> "$CAPTION_FILE"
-
+            printf "\n*KernelSU*  \`%s\`\n" "${KSU_VARIANT_ESC}"            >> "$CAPTION_FILE"
             if [ "${SUSFS_ENABLED}" == "true" ]; then
-              printf "🔒  \`SUSFS Enabled\`\n" >> "$CAPTION_FILE"
+              printf "*SUSFS*     \`Enabled\`\n"                             >> "$CAPTION_FILE"
             fi
-
-            printf "📥  [Manager](%s)\n" "${KSU_REPO}/releases/latest" >> "$CAPTION_FILE"
+            printf "*Manager*   [Download](%s)\n" "${KSU_REPO}/releases/latest" >> "$CAPTION_FILE"
           else
-            printf "🛡  \`Stock \(No root\)\`\n" >> "$CAPTION_FILE"
+            printf "\n*KernelSU*  \`Stock\`\n"                              >> "$CAPTION_FILE"
           fi
 
           NOTE="${{ github.event.inputs.custom_note }}"
           if [ -n "$NOTE" ]; then
             NOTE_ESC=$(esc "$NOTE")
-            printf "\n📝  %s\n" "${NOTE_ESC}" >> "$CAPTION_FILE"
+            printf "\n*Note*  %s\n" "${NOTE_ESC}"                           >> "$CAPTION_FILE"
           fi
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          printf "\n[View Run](%s)\n" "${RUN_URL}" >> "$CAPTION_FILE"
+          printf "\n[View Run](%s)\n" "${RUN_URL}"                          >> "$CAPTION_FILE"
 
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
             -F chat_id="${TELEGRAM_CHAT_ID}" \
@@ -411,7 +376,7 @@ jobs:
 
           rm -f "$CAPTION_FILE"
 
-      # ── 18. Failure notification ──────────────────────────────────────────────
+      # ── 17. Failure notification ──────────────────────────────────────────────
       - name: Send Failure Notification to Telegram
         if: failure()
         run: |
@@ -429,23 +394,23 @@ jobs:
           VARIANT_ESC=$(esc "$VARIANT_TAG")
           BRANCH_ESC=$(esc "${{ github.event.inputs.kernel_branch }}")
           COMMIT_ESC=$(esc "${KERNEL_COMMIT:-N/A}")
+          COMMIT_MSG_ESC=$(esc "${KERNEL_COMMIT_MSG:-N/A}")
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           MSG_FILE=$(mktemp)
-          printf "❌ *Build Failed*\n\n"                          >> "$MSG_FILE"
-          printf "📱  \`RM6785 \(MT6785\)\`\n"                   >> "$MSG_FILE"
-          printf "🌿  \`%s\`\n" "${BRANCH_ESC}"                  >> "$MSG_FILE"
-          printf "🔖  \`%s\`\n" "${COMMIT_ESC}"                  >> "$MSG_FILE"
-          printf "🔧  \`%s\`\n" "${VARIANT_ESC}"                  >> "$MSG_FILE"
+          printf "*Build Failed*\n\n"                                              >> "$MSG_FILE"
+          printf "*Branch*   \`%s\`\n"     "${BRANCH_ESC}"                        >> "$MSG_FILE"
+          printf "*Commit*   \`%s\` — %s\n" "${COMMIT_ESC}" "${COMMIT_MSG_ESC}"   >> "$MSG_FILE"
+          printf "*Variant*  \`%s\`\n"     "${VARIANT_ESC}"                       >> "$MSG_FILE"
 
           NOTE="${{ github.event.inputs.custom_note }}"
           if [ -n "$NOTE" ]; then
             NOTE_ESC=$(esc "$NOTE")
-            printf "\n📝  %s\n" "${NOTE_ESC}" >> "$MSG_FILE"
+            printf "\n*Note*  %s\n" "${NOTE_ESC}"                                 >> "$MSG_FILE"
           fi
 
-          printf "\n[View Logs](%s)\n" "${RUN_URL}" >> "$MSG_FILE"
+          printf "\n[View Logs](%s)\n" "${RUN_URL}"                               >> "$MSG_FILE"
 
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
