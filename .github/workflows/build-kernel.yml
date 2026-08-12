@@ -20,11 +20,11 @@ on:
         required: false
         type: choice
         options:
-          - 'RKSU'
+          - 'KSUNext'
           - 'xxKSU'
           - 'SukiSU'
           - 'ReSukiSU'
-        default: 'RKSU'
+        default: 'KSUNext'
 
       enable_susfs:
         description: 'Enable SUSFS (RKSU / SukiSU / ReSukiSU only)'
@@ -200,24 +200,16 @@ jobs:
 
       # ── 7. KernelSU variants ───────────────────────────────────────────────────
 
-      # --- RKSU ---
-      # susfs-rksu-master -> RKSU + SUSFS (manual-hook; no CONFIG_KSU_MANUAL_HOOK needed)
-      # main              -> RKSU without SUSFS
-      - name: Setup KernelSU — RKSU
-        if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'RKSU'
+      # --- KSUNext---
+      - name: Setup KernelSU — KSUNext
+        if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'KSUNext'
         working-directory: kernel
         run: |
-          if [ "${{ github.event.inputs.enable_susfs }}" == "true" ]; then
-            curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s susfs-rksu-master
-            echo "SUSFS_ENABLED=true"               >> $GITHUB_ENV
-            echo "KSU_BRANCH=susfs-rksu-master"     >> $GITHUB_ENV
-          else
-            curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
-            echo "SUSFS_ENABLED=false"              >> $GITHUB_ENV
-            echo "KSU_BRANCH=main"                  >> $GITHUB_ENV
-          fi
-          echo "KSU_VARIANT=RKSU"                                     >> $GITHUB_ENV
-          echo "KSU_REPO=https://github.com/rsuntk/KernelSU"          >> $GITHUB_ENV
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+          echo "SUSFS_ENABLED=true"               >> $GITHUB_ENV
+          echo "KSU_BRANCH=legacy"     >> $GITHUB_ENV
+          echo "KSU_VARIANT=KSUNext"                                     >> $GITHUB_ENV
+          echo "KSU_REPO=https://github.com/KernelSU-Next/KernelSU-Next"          >> $GITHUB_ENV
 
       # --- xxKSU ---
       # branch: master — no SUSFS support
