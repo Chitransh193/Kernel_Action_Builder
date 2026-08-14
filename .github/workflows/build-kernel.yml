@@ -217,11 +217,11 @@ jobs:
         if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'xxKSU'
         working-directory: kernel
         run: |
-          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s master
+          curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/xxksu/kernel/setup.sh" | bash -s xxksu
           echo "KSU_VARIANT=xxKSU"                                            >> $GITHUB_ENV
-          echo "SUSFS_ENABLED=false"                                           >> $GITHUB_ENV
-          echo "KSU_BRANCH=master"                                             >> $GITHUB_ENV
-          echo "KSU_REPO=https://github.com/backslashxx/KernelSU"             >> $GITHUB_ENV
+          echo "SUSFS_ENABLED=true"                                           >> $GITHUB_ENV
+          echo "KSU_BRANCH=xxksu"                                             >> $GITHUB_ENV
+          echo "KSU_REPO=https://github.com/RapliVx/KernelSU"             >> $GITHUB_ENV
           if [ "${{ github.event.inputs.enable_susfs }}" == "true" ]; then
             echo "::warning::xxKSU does not support SUSFS — flag ignored."
           fi
