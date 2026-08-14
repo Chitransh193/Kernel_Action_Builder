@@ -205,11 +205,11 @@ jobs:
         if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'KSUNext'
         working-directory: kernel
         run: |
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+          curl -LSs "https://raw.githubusercontent.com/manipvlator/KernelSU-Next/stable/kernel/setup.sh" | bash -s syscall
           echo "SUSFS_ENABLED=true"               >> $GITHUB_ENV
-          echo "KSU_BRANCH=legacy"     >> $GITHUB_ENV
+          echo "KSU_BRANCH=syscall"     >> $GITHUB_ENV
           echo "KSU_VARIANT=KSUNext"                                     >> $GITHUB_ENV
-          echo "KSU_REPO=https://github.com/KernelSU-Next/KernelSU-Next"          >> $GITHUB_ENV
+          echo "KSU_REPO=https://github.com/manipvlator/KernelSU-Next"          >> $GITHUB_ENV
 
       # --- xxKSU ---
       # branch: master — no SUSFS support
