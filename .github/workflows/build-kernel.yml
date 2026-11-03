@@ -58,7 +58,8 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       KERNEL_REPO: "https://github.com/Chitransh193/android_kernel_realme_mt6785.git"
-      CLANG_REPO: "https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r547379.git"
+      CLANG_VERSION: "23.1.4"
+      CLANG_URL: "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.4/LLVM-23.1.4-Linux-X64.tar.xz"
       ANYKERNEL_REPO: "https://github.com/Chitransh193/AK3.git"
       ANYKERNEL_BRANCH: "main"
       DEFCONFIG: "RM6785_defconfig"
@@ -176,12 +177,18 @@ jobs:
         id: cache-clang
         with:
           path: clang
-          key: clang-r547379
+          key: clang-llvm-${{ env.CLANG_VERSION }}
 
-      - name: Clone Clang Toolchain
+      - name: Download Clang Toolchain
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
-          git clone --depth=1 "$CLANG_REPO" clang
+          mkdir -p clang
+          curl -fL --retry 3 "$CLANG_URL" -o llvm.tar.xz
+          tar -xJf llvm.tar.xz -C clang --strip-components=1
+          rm -f llvm.tar.xz
+
+      - name: Show Clang version
+        run: ${GITHUB_WORKSPACE}/clang/bin/clang --version
 
       # ── 6. AnyKernel3 ──────────────────────────────────────────────────────────
       - name: Cache AnyKernel3
