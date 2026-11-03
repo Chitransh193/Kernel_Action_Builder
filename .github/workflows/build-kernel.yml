@@ -20,11 +20,11 @@ on:
         required: false
         type: choice
         options:
-          - 'KSUNext'
+          - 'manipvlatorKernelSU'
           - 'xxKSU'
           - 'SukiSU'
           - 'ReSukiSU'
-        default: 'KSUNext'
+        default: 'manipvlatorKernelSU'
 
       enable_susfs:
         description: 'Enable SUSFS (RKSU / SukiSU / ReSukiSU only)'
@@ -201,15 +201,15 @@ jobs:
       # ── 7. KernelSU variants ───────────────────────────────────────────────────
 
       # --- KSUNext---
-      - name: Setup KernelSU — KSUNext
-        if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'KSUNext'
+      - name: Setup KernelSU — manipvlatorKernelSU
+        if: github.event.inputs.enable_ksu == 'true' && github.event.inputs.ksu_variant == 'manipvlatorKernelSU'
         working-directory: kernel
         run: |
-          curl -LSs "https://raw.githubusercontent.com/manipvlator/KernelSU-Next/stable/kernel/setup.sh" | bash -s syscall
+          curl -LSs "https://raw.githubusercontent.com/manipvlator/KernelSU/refs/heads/main/kernel/setup.sh" | bash -s main
           echo "SUSFS_ENABLED=true"               >> $GITHUB_ENV
-          echo "KSU_BRANCH=syscall"     >> $GITHUB_ENV
-          echo "KSU_VARIANT=KSUNext"                                     >> $GITHUB_ENV
-          echo "KSU_REPO=https://github.com/manipvlator/KernelSU-Next"          >> $GITHUB_ENV
+          echo "KSU_BRANCH=main"     >> $GITHUB_ENV
+          echo "KSU_VARIANT=manipvlatorKernelSU"                                     >> $GITHUB_ENV
+          echo "KSU_REPO=https://github.com/manipvlator/KernelSU"          >> $GITHUB_ENV
 
       # --- xxKSU ---
       # branch: master — no SUSFS support
